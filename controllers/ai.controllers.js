@@ -1,5 +1,5 @@
 import Embedding from "../models/embedding.models.js"
-import { generateAIResponse, generateAIStream, generateEmbedding } from "../services/ai.services.js"
+import { generateAIResponse, generateAIStream, generateEmbedding, generateTextResponse } from "../services/ai.services.js"
 import { chunkTextByWords } from "../utils/chunkText.js"
 
 
@@ -65,14 +65,14 @@ export const createEmbedding=async(req,resp)=>{
 
 export const createChunkEmbedding=async(req,resp)=>{
     try{
-        const{text}=req.body
+       
         const chunks=await chunkTextByWords(text,5,2)
         const result=[]
         for (const chunk of chunks){
             const embedding=await generateEmbedding(chunk)
             result.push({
                 text:chunk,
-                embedding
+                embedding:embedding,
             })
         }
         resp.json({
@@ -91,15 +91,17 @@ export const createChunkEmbedding=async(req,resp)=>{
 
 export const GenerateChunkEmbedding=async(req,resp)=>{
     try{
-    const{text}=req.body
+    const{text,category,source}=req.body
     const chunks=chunkTextByWords(text,5,2)
     const result=[]
     for(const chunk of chunks){
         const embedding=await generateEmbedding(chunk)
-        const document=await Embedding.create({
-        text:chunk,
-        embedding
-    })
+            const document = await Embedding.create({
+                text: chunk,
+                embedding: embedding,
+                category: category,
+                source: source
+            });
      
     result.push(document)
     }
@@ -144,3 +146,87 @@ export const SearchSimilarChunks=async(req,resp)=>{
         });
     }
 }
+
+
+export const ragChat = async (req, resp) => {
+    try {
+        const { query } = req.body;
+
+        // 1. Convert user query into embedding
+        const queryEmbedding = await generateEmbedding(query);
+
+        // 2. Search similar chunks
+        const results = await Embedding.aggregate([
+            {
+                $vectorSearch: {
+                    index: "vector_index",
+                    path: "embedding",
+                       queryVector: queryEmbedding,
+                    filter:{
+                        category:"technology"
+                    },
+                    numCandidates: 50,
+                    limit: 5
+                }
+            },
+            {
+                $project: {
+                    text: 1,
+                    score: {
+                        $meta: "vectorSearchScore"
+                    }
+                }
+            }
+        ]);
+
+        // 3. Keep only relevant chunks
+        const relevantResult = results.filter(
+            result => result.score >= 0.5
+        );
+
+        // 4. If nothing relevant was found
+        if (relevantResult.length === 0) {
+            return resp.json({
+                answer: "I don't know based on the available context.",
+                results
+            });
+        }
+
+        // 5. Create context from relevant chunks
+        const context = relevantResult
+            .map(result => result.text)
+            .join("\n");
+
+        // 6. Create prompt for LLM
+        const prompt = `
+            Answer the user's question using the provided context.
+
+            Context:
+            ${context}
+
+            User Question:
+            ${query}
+
+            If the answer is not present in the context,
+            say you do not know.
+        `;
+
+        // 7. Generate final answer
+        const answer = await generateTextResponse(prompt);
+
+        // 8. Send response
+        resp.json({
+            answer,
+            results
+        });
+
+    } catch (err) {
+        console.log(err);
+
+        resp.status(500).json({
+            error: "RAG failed"
+        });
+    }
+};
+
+

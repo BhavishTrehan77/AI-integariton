@@ -42,12 +42,25 @@ export const generateAIStream=async(message)=>{
     return stream
 }
 
-export const generateEmbedding=async(text)=>{
-    const response=await ai.models.embedContent({
-        model:'gemini-embedding-001',
-        contents:text
+export const generateEmbedding = async (text) => {
+
+    console.log("EMBED TEXT:", text);
+    console.log("EMBED TYPE:", typeof text);
+
+    const response = await ai.models.embedContent({
+        model: "gemini-embedding-001",
+        contents: text
+    });
+
+    return response.embeddings[0].values;
+};
+
+export const generateTextResponse=async(prompt)=>{
+    const response=await ai.models.generateContent({
+        model:'gemini-3.6-flash',
+        contents:prompt
     })
-    return response.embeddings[0].values
+    return response.text
 }
 
 
@@ -81,9 +94,6 @@ export const generateEmbedding=async(text)=>{
 //     const rawData=validatio.parse(validation)
 //     return rawData
 // }
-
-
-
 
 
 

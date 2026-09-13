@@ -8,6 +8,12 @@ const embeddingSchema=new mongoose.Schema({
     embedding:{
         type:[Number],
         required:true
+    },
+    category:{
+        type:String
+    },
+    source:{
+        type:String
     }
 })
 

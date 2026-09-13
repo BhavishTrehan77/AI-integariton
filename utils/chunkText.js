@@ -46,3 +46,22 @@ console.log(chunkTextByWords(text2, 5, 2));
 //     }
 //     return chunks
 // ]
+
+// export const chunkText=async(text,textSize,overlap)=>{
+//     const chunks=[]
+//     for(let i=0;i<text.length;i+=textSize-overlap){
+//         chunks.push(text.slice(i,i+textSize))
+//     }
+//     return chunks
+// }
+
+
+// export const ChunkByWords=async(text,textSize,overlap)=>{
+//     const chunks=[]
+//     const words=text.trim().split(/\s/)
+//     for(let i=0;i<text.length;i+=textSize-overlap){
+//         const chunk=words.slice(i,i+textSize)
+//         chunks.push(chunk.join(" "))
+//     }
+//     return chunks
+// }
