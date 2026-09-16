@@ -8,17 +8,40 @@ const taskSchema=z.object({
     due: z.string().optional()
 })
 
+export const generateAi=async(message)=>{
+    const response=await ai.models.generateContent({
+        model:"gemini-3.5-flash-lite",
+        contents:message,
+        config:{
+            systemInstruction:`ai should answer the question concisely and give correct answer`
+        }
+    })
+    return response
 
+}
 
 export const generateAIResponse=async(message)=>{
     const response=await ai.models.generateContent({
-        model:'gemini-3.6-flash',
+        model:"gemini-3.5-flash-lite",
         contents:message,
         config:{
-            systemInstruction:`you are helpful ai asistant. answer clearly and concisely\
-            RETURN JSON  
-            {title:"string",
-            "priority":"low"|"medium"|"high"},"due":"string"  RETURN ONLY JSON`,
+            systemInstruction:` You are a helpful task assistant.
+
+                Convert the user's request into a task object.
+
+                Return ONLY valid JSON in this format:
+                {
+                    "title": "string",
+                    "priority": "low",
+                    "due": "string"
+                }
+
+                Priority must be one of:
+                "low", "medium", "high"
+
+                The title should describe the user's requested task.
+                Do not return the user's question as the entire response.
+                Extract the task information from it.`,
 
             responseMimeType:"application/json"
 
@@ -55,45 +78,43 @@ export const generateEmbedding = async (text) => {
     return response.embeddings[0].values;
 };
 
-export const generateTextResponse=async(prompt)=>{
-    const response=await ai.models.generateContent({
-        model:'gemini-3.6-flash',
-        contents:prompt
+// export const generateTextResponse=async(prompt)=>{
+//     const response=await ai.models.generateContent({
+//         model: "gemini-2.5-flash",
+//         contents:prompt
+//     })
+//     return response.text
+// }
+export const generateTextResponse = async (prompt) => {
+
+    console.log("🔥 generateTextResponse CALLED");
+    console.log("🔥 MODEL = gemini-2.5-flash");
+
+    const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash-lite",
+        contents: prompt
     })
+
     return response.text
 }
 
 
-
-// // my work is to 1st connect the api and get the reponse for the query simple response
-
-// // // so firstly export const async function getresponse(message)=>{
-// // const reply=await ai.models.generateContent({
-// //     model:"gemini-3.6-flash",
-// //     contents:message
-// // })
-// // } move this whole code itno try catch and it is done and in vontroller just take maess from req.bpody and make trout for positng and oyu are done
-
-// now second part we have to add valiodation to the data that data should be returned in json format
-// what we will do is firstly make a zod validation on top
-
-// const validatio=z.object({
-//     title:"string",
-// })
-
-// then make a functionn 
-
-// export const async function generatevalidatedcontent(messaeg)=>{
-//     const reply=await ai.models.generateContent({
-//         model:"gemini-3.6-flash",
-//         contents:message,
-//         systemInstruction:`this is to be told and information for the model that return output should be in json format it shpould be like this {"title":"string"}
-//         return it in json`
-//     })
-//     const validation=JSON.parse(reply)
-//     const rawData=validatio.parse(validation)
-//     return rawData
-// }
+export const rewriteQuery=async(query)=>{
+    const response=await ai.models.generateContent({
+        model:"gemini-3.5-flash-lite",
+        contents:`Rewrite the users query into clear and specific search query .Return only the rewritten query. Do not answer the question. User Query ${query}`
+    })
+    return response.text.trim();
+}
 
 
-
+export const expandQuery=async(query)=>{
+    const response=await ai.models.generateContent({
+        model:"gemini-3.1-flash-lite",
+        contents:`Generate 3 different search queries that could help retrieve documents relevant to the user questions. return only 3 queries one per line. Do not answer the question User quesion ${query}`
+    })
+    return response.text.trim()
+        .split("\n")
+        .map(q => q.replace(/^\d+[\).\s-]*/, "").trim())
+        .filter(Boolean);
+}

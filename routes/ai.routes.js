@@ -1,5 +1,5 @@
 import express from 'express'
-import { chat, chatEmbedding, chatStream, createChunkEmbedding, createEmbedding, GenerateChunkEmbedding, ragChat, SearchSimilarChunks } from '../controllers/ai.controllers.js'
+import { answer, chat, chatEmbedding, chatStream, createChunkEmbedding, createEmbedding, echat, GenerateChunkEmbedding, ragChat, SearchSimilarChunks } from '../controllers/ai.controllers.js'
 
 
 
@@ -15,5 +15,7 @@ router.post("/embeddings/chunks", createChunkEmbedding);
 router.post("/generate",GenerateChunkEmbedding)
 router.post("/ret",SearchSimilarChunks)
 router.post("/answer",ragChat)
+router.post("/expandQuery",echat)
+router.post("/payal",answer)
 
 export default router
