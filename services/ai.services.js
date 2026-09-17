@@ -1,5 +1,5 @@
 import { ai } from "../config/ai.js";
-import {z} from 'zod'
+import {properties, z} from 'zod'
 import { chunkTextByWords } from "../utils/chunkText.js";
 
 const taskSchema=z.object({
@@ -118,3 +118,162 @@ export const expandQuery=async(query)=>{
         .map(q => q.replace(/^\d+[\).\s-]*/, "").trim())
         .filter(Boolean);
 }
+
+
+export const addNumbers=(a,b)=>{
+    return a+b
+}
+
+export const functionCalling=async(message)=>{
+    const response=await ai.models.generateContent({
+        model:"gemini-3.6-flash",
+        contents:message,
+
+        config:{
+            tools: [
+                {
+                    functionDeclarations:[
+                        {
+                            name:"addNumbers",
+                            description: "Add two numbers togeather",
+                            parameters:{
+                                type:"OBJECT",
+                                properties:{
+                                a:{
+                                    type:"NUMBER",
+                                    description: "First number"
+                                },
+                                b:{
+                                    type:"NUMBER",
+                                    description: "Second number"
+                                }
+                            },
+                             required: ["a","b"]
+                            }
+                           
+                        }
+                    ]
+                }
+            ]
+        }
+    })
+    return response
+}
+
+// export const getWeather=async(city)=>{
+//     const response=await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${process.env.WEATHER_API_KEY}&units=metric`)
+//     const data=await response.json()
+
+//     return{
+//         city:data.name,
+//         temperature: data.main.temp,
+//         condition: data.weather[0].description
+//     }
+// }
+export const getWeather = async (city) => {
+
+    const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${process.env.WEATHER_API_KEY}&units=metric`
+    );
+
+    const data = await response.json();
+
+    console.log("WEATHER STATUS:", response.status);
+    console.log("WEATHER DATA:", data);
+
+    if (!response.ok) {
+        throw new Error(data.message || "Weather API failed");
+    }
+
+    return {
+        city: data.name,
+        temperature: data.main.temp,
+        condition: data.weather[0].description
+    };
+};
+
+export const weatherTool=async(message)=>{
+   const response=await ai.models.generateContent({
+    model:"gemini-3.6-flash",
+    contents:message,
+    config:{
+        tools:[
+            {
+                functionDeclarations:[
+                    {
+                        name:"getWeather",
+                        description:"Get current weather information for a city",
+                        parameters: {
+                            type:"OBJECT",
+                            properties:{
+                                city:{
+                                    type:"STRING",
+                                    description:"Name of the city"
+                                }
+                            }
+                        },
+                        required: ["city"]
+
+                    }
+                ]
+            }
+        ]
+    }
+   })
+   return response
+}
+
+export const tools = {
+    addNumbers,
+    getWeather
+};
+
+export const agent = async (query) => {
+    const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: query,
+
+        config: {
+            tools: [
+                {
+                    functionDeclarations: [
+                        {
+                            name: "addNumbers",
+                            description: "Add two numbers",
+
+                            parameters: {
+                                type: "OBJECT",
+                                properties: {
+                                    a: {
+                                        type: "NUMBER"
+                                    },
+                                    b: {
+                                        type: "NUMBER"
+                                    }
+                                },
+                                required: ["a", "b"]
+                            }
+                        },
+
+                        {
+                            name: "getWeather",
+                            description: "Get current weather information for a city",
+
+                            parameters: {
+                                type: "OBJECT",
+                                properties: {
+                                    city: {
+                                        type: "STRING"
+                                    }
+                                },
+                                required: ["city"]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    });
+
+    return response;
+};

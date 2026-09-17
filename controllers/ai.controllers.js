@@ -1,5 +1,7 @@
+import { properties } from "zod"
+import { ai } from "../config/ai.js"
 import Embedding from "../models/embedding.models.js"
-import { expandQuery, generateAi, generateAIResponse, generateAIStream, generateEmbedding, generateTextResponse, rewriteQuery } from "../services/ai.services.js"
+import { addNumbers, agent, expandQuery,functionCalling, generateAi, generateAIResponse, generateAIStream, generateEmbedding, generateTextResponse, getWeather, rewriteQuery, tools, weatherTool } from "../services/ai.services.js"
 import { chunkTextByWords } from "../utils/chunkText.js"
 
 
@@ -363,8 +365,7 @@ export const dechat=async(req,resp)=>{
     try{
         const{query}=req.body
         const rewrittenQuery=await rewriteQuery(query)
-        console.log(rewriteQuery)
-        const expandedQuery=await expandQuery(rewrittenQuery)
+        console.log(rewrittenQuery)
         const allResults=[]
         for(const searchQuery of expandQuery){
             const queryEmbedding=await queryEmbedding(searchQuery)
@@ -394,7 +395,13 @@ export const dechat=async(req,resp)=>{
             ...new Map(allResults.map(results=>[results.text,results])).values()
         ]
         const Relevent=uniqueResults.filter(result=>result.score>=0.5).sort((a,b)=>b.score-a.score)
-        const context=relevantResult.map(result=>result.text).join("\n")
+        const context=Relevent.map(result=>result.text).join("\n")
+        const prompt=`heyy ai answer it by taking context context is ${context} ans you have to answer the query and query is ${query} Only answer on the basis of context `
+        const ans=await generateTextResponse(prompt)
+        resp.json({
+            ans
+        })
+
 
         
     }catch(err){
@@ -449,3 +456,129 @@ export const searchByChunks=async(req,resp)=>{
             KeyWordResults
         })
 }
+
+export const reciprocalRankFusuion=(vectorResults,KeyWordResults,k=60)=>{
+    const scores=new Map();
+    const addResults=(results)=>{
+        results.forEach((result,index)=>{
+            const rank=index+1;
+            const rrfScore=1/(k+rank)
+            const currentScore=scores.get(result.text)||0
+            scores.set(result.text,currentScore+rrfScore)
+        })
+    }
+    addResults(vectorResults)
+    addResults(KeyWordResults)
+    return [...scores.entries()].map(([text, score]) => ({
+    text,
+    score
+})).sort((a,b)=>b.score-a.score)
+}
+
+export const functionCallController=async(req,resp)=>{
+    try{
+        const{query}=req.body
+        const response=await functionCalling(query)
+        console.log(response)
+        resp.json({
+            response
+        })
+    }catch(err){
+        console.log(err)
+        resp.status(500).json({
+            error:"Function calling failed"
+        })
+    }
+}
+export const functionCallControllers=async(req,resp)=>{
+    try{
+        const{query}=req.body
+        const response=await functionCalling(query)
+        const functionCall=response.functionCalls?.[0]
+        if(!functionCall){
+            return resp.json({
+                answer: response.text
+            });
+        }
+              console.log("FUNCTION NAME:", functionCall.name);
+        console.log("FUNCTION ARGS:", functionCall.args);
+        let results;
+        if(functionCall.name==="addNumbers"){
+            results=addNumbers(functionCall.args.a,functionCall.args.b)
+        }
+        resp.json({
+            function: functionCall.name,
+            args: functionCall.args,
+            results
+        })
+    }catch(err){
+ console.log(err);
+
+        resp.status(500).json({
+            error: "Function calling failed"
+        });
+    }
+}
+
+export const weatherController=async(req,resp)=>{
+    try{
+        const{query}=req.body
+        const response=weatherTool(query)
+        console.log("Response",response)
+        const functionCall=response.functionCalls?.[0];
+        if(!functionCall){
+             return resp.json({
+                answer: response.text
+            });
+        }
+        console.log("FUNCTION NAME:", functionCall.name);
+        console.log("FUNCTION ARGS:", functionCall.args);
+        let results;
+        if(functionCall.name==="getWeather"){
+            results=await getWeather(functionCall.args.city)
+        }
+        resp.json({
+            function:functionCall.name,
+            args:functionCall.args,
+            results
+        })
+    }catch(err){
+ console.log(err);
+
+        resp.status(500).json({
+            error: "Weather tool failed"
+        });
+    }
+}
+export const Answer = async (req, resp) => {
+    const { query } = req.body;
+
+    const response = await agent(query);
+
+    const functionCalling = response.functionCalls?.[0];
+
+    console.log("FUNCTION CALL:", functionCalling);
+
+    if (!functionCalling) {
+        return resp.json({
+            answer: response.text
+        });
+    }
+
+    const tool = tools[functionCalling.name];
+
+    if (!tool) {
+        throw new Error("Tool not found");
+    }
+
+    const result = await tool(
+        ...Object.values(functionCalling.args)
+    );
+
+    return resp.json({
+        function: functionCalling.name,
+        args: functionCalling.args,
+        result
+    });
+};
+
