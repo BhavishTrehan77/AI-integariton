@@ -1,7 +1,7 @@
 import { properties } from "zod"
 import { ai } from "../config/ai.js"
 import Embedding from "../models/embedding.models.js"
-import { addNumbers, agent, expandQuery,functionCalling, generateAi, generateAIResponse, generateAIStream, generateEmbedding, generateTextResponse, getWeather, rewriteQuery, tools, weatherTool } from "../services/ai.services.js"
+import { addNumbers, agent, agentLoop, createPlan, executePlan, expandQuery,functionCalling, generateAi, generateAIResponse, generateAIStream, generateEmbedding, generateTextResponse, getWeather, rewriteQuery, tools, weatherTool } from "../services/ai.services.js"
 import { chunkTextByWords } from "../utils/chunkText.js"
 
 
@@ -532,7 +532,7 @@ export const weatherController=async(req,resp)=>{
             });
         }
         console.log("FUNCTION NAME:", functionCall.name);
-        console.log("FUNCTION ARGS:", functionCall.args);
+       
         let results;
         if(functionCall.name==="getWeather"){
             results=await getWeather(functionCall.args.city)
@@ -582,3 +582,42 @@ export const Answer = async (req, resp) => {
     });
 };
 
+
+export const planningController=async(req,resp)=>{
+    try{
+    const{query}=req.body
+    const plan=await createPlan(query)
+    console.log("plan",plan)
+
+    const result=await executePlan(plan)
+
+    console.log(result)
+
+    return resp.json({
+        query,
+        plan,
+        result
+    })
+    }catch(err){
+        console.log(err)
+        return resp.json({
+            error:"planning failed"
+        })
+    }
+}
+
+export const AgentkeThrough=async(req,resp)=>{
+    try{
+        const{query}=req.body
+        const answer=await agentLoop(query)
+        return resp.json({
+            answer
+        })
+    }catch(err){
+         console.log(err);
+
+        return resp.status(500).json({
+            error: "Agent loop failed"
+        });
+    }
+}

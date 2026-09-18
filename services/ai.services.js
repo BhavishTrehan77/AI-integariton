@@ -277,3 +277,151 @@ export const agent = async (query) => {
 
     return response;
 };
+export const createPlan = async (query) => {
+
+    const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+
+        contents: `
+You are AI planning agent.
+
+Break the users request into executable steps.
+
+Available tools:
+1. getWeather(city)
+2. addNumbers(a,b)
+
+Return only valid JSON.
+
+Format:
+[
+    {
+        "tool": "getWeather",
+        "args": {
+            "city": "rohtak"
+        }
+    },
+    {
+        "tool": "addNumbers",
+        "args": {
+            "a": 25,
+            "b": 35
+        }
+    }
+]
+
+Rules:
+- Each step must contain a tool.
+- Each step must contain args.
+- Do not execute the tools.
+- Do not answer the user.
+
+User request:
+${query}
+        `
+    });
+
+    return JSON.parse(response.text);
+};
+
+export const executePlan=async(plan)=>{
+    const results=[];
+    for(const step of plan){
+        const tool=tools[step.tool]
+         if (!tool) {
+            throw new Error(`Tool not found: ${step.tool}`);
+        }
+        const result=await tool(...Object.values(step.args))
+        results.push({
+            tool:step.tool,
+            args:step.args,
+            result
+        })
+    }
+    return results;
+}
+
+export const agentLoop=async(query)=>{
+    const message=[
+        {
+            role: "user",
+            parts: [
+                {
+                    text: query
+                }
+            ]
+        }
+    ];
+    while(true){
+        const response=await ai.models.generateContent({
+            model:"gemini-3.5-flash",
+            contents:message,
+            config:{
+                tools:[
+                    {
+                    name:"addNumbers",
+                    description:"add two nos",
+
+                    parameters: {
+                        type:"OBJECT",
+
+                        parameters:{
+                            a:{
+                                type:"NUMBER"
+                            },
+                            b:{
+                                type:"NUMBER"
+                            }
+                        },
+                        required: ["a","b"]
+                    }
+                    },
+                    {
+                        name: "getWeather",
+                        description: "get current weather information for a city",
+
+                        parameters:{
+                            type:"OBJECT",
+                            parameters:{
+                                city:{
+                                    type:"STRING"
+                                }
+                            },
+                            required: ["city"]
+                        }
+                    }
+                    
+                    
+                ]
+            }
+        })
+        const functionCalling=response.functionCalls?.[0]  
+            console.log("FUNCTION CALL:", functionCalling);
+
+        // No tool call = final answer
+        if (!functionCalling) {
+            return response.text;
+        }
+        const tool=tools[functionCalling.args]
+
+        const result=await tool(...Object.values(functionCalling.args))
+
+        message.push(response.candidates[0].content)
+
+        message.push({
+            role: "user",
+            parts: [
+                {
+                    functionResponse: {
+                        name: functionCalling.name,
+                        response: {
+                            result
+                        }
+                    }
+                }
+            ]
+        })
+        }
+
+}
+
