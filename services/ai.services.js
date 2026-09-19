@@ -1,6 +1,10 @@
 import { ai } from "../config/ai.js";
 import {properties, z} from 'zod'
 import { chunkTextByWords } from "../utils/chunkText.js";
+import fs from "fs";
+import { PDFParse } from "pdf-parse";
+import Embedding from "../models/embedding.models.js";
+import { parse } from "path";
 
 const taskSchema=z.object({
     title:z.string(),
@@ -182,7 +186,7 @@ export const getWeather = async (city) => {
     console.log("WEATHER DATA:", data);
 
     if (!response.ok) {
-        throw new Error(data.message || "Weather API failed");
+            throw new Error(data.message || "Weather API failed");
     }
 
     return {
@@ -210,9 +214,10 @@ export const weatherTool=async(message)=>{
                                     type:"STRING",
                                     description:"Name of the city"
                                 }
-                            }
-                        },
-                        required: ["city"]
+                            },
+                            required: ["city"]
+                        }
+                        
 
                     }
                 ]
@@ -424,4 +429,122 @@ export const agentLoop=async(query)=>{
         }
 
 }
+export const analyzeImage=async(imageBase64,question)=>{
+    const response=await ai.models.generateContent({
+        model:"gemini-3.6-flash",
+        contents: [
+            {
+                inlineData:{
+                    mimeType: "image/jpeg",
+                    data: imageBase64
+                }
+            },
+            {
+                text:question
+            }
+        ]
+    })
+    return response.text
+}
+
+export const analyzeImageStructure=async(imageBase64,question)=>{
+    const response=await ai.models.generateContent({
+        model:"gemini-3.6-flash",
+        contents:[
+            {
+                inlineData:{
+                    mimeType:"image/jpeg",
+                    data:imageBase64
+                }
+            },
+            {
+            text:`Analyze the image and answer the question ${question}.
+
+Question:
+${question}`
+            }
+        ],
+        config:{
+            responseMimeType:"application/json"
+        }
+    })
+    return JSON.parse(response.text)
+}
+
+export const analyzePDF =async(pdfBase64,question)=>{
+    const response=await ai.models.generateContent({
+        model:"gemini-3.6-flash",
+        contents:[
+            {
+                inlineData: {
+                    mimeType: "application/pdf",
+                    data: pdfBase64
+                }
+               
+            },
+            {
+                text:question
+            }
+        ]
+    })
+    return response.text
+}
+
+export const extractPdfText=async(filePath)=>{
+    const dataBuffer=fs.readFileSync(filePath)
+
+    const parser=new PDFParse({
+        data:dataBuffer
+    })
+    const data=await parser.getText();
+
+    await parser.destroy(); 
+
+    const text=data.text;
+
+    const chunks=chunkTextByWords(text,100,20)
+
+   const results=[]
+   for (const chunk of chunks){
+    const embedding=await generateEmbedding(chunk);
+
+    const result=await Embedding.create({
+        text:chunk,
+        embedding:embedding,
+        source: filePath
+    })
+    results.push(result)
+   } 
+   return results
+}
+
+export const pdfRag=async(query,filePath)=>{
+    const queryEmbedding=await generateEmbedding(query)
+
+    const results=await Embedding.aggregate([
+        {
+            $vectorSearch:{
+                index:"vector_index",
+                path:"embedding",
+                queryVector:queryEmbedding,
+                numCandidates:50,
+                limit:5,
+                filter:{
+                    source:filePath
+                }
+            }
+        }
+    ])
+    const context=results.map(result=>result.text).join("\n")
+    const response=await ai.models.generateContent({
+        model:"gemini-3.5-flash",
+        contents:`Answer the users question only the basis of provided context .
+        PDF context is ${context} and user question is ${query}If the answer is not present in the PDF context,
+say "I don't know based on the provided PDF."
+`
+    })
+    return response.text
+}
+
+
 

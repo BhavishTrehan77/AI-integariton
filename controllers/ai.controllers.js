@@ -1,7 +1,7 @@
 import { properties } from "zod"
 import { ai } from "../config/ai.js"
 import Embedding from "../models/embedding.models.js"
-import { addNumbers, agent, agentLoop, createPlan, executePlan, expandQuery,functionCalling, generateAi, generateAIResponse, generateAIStream, generateEmbedding, generateTextResponse, getWeather, rewriteQuery, tools, weatherTool } from "../services/ai.services.js"
+import { addNumbers, agent, agentLoop, analyzeImage, analyzeImageStructure, analyzePDF, createPlan, executePlan, expandQuery,extractPdfText,functionCalling, generateAi, generateAIResponse, generateAIStream, generateEmbedding, generateTextResponse, getWeather, pdfRag, rewriteQuery, tools, weatherTool } from "../services/ai.services.js"
 import { chunkTextByWords } from "../utils/chunkText.js"
 
 
@@ -131,7 +131,7 @@ export const GenerateChunkEmbedding=async(req,resp)=>{
     }
 }
 
-export const SearchSimilarChunks=async(req,resp)=>{
+export const KeywordSearch=async(req,resp)=>{
     try{
         const{query}=req.body;
 
@@ -139,13 +139,6 @@ export const SearchSimilarChunks=async(req,resp)=>{
 
         const results=await Embedding.aggregate([
             {
-                // $vectorSearch: {
-                //     index: "vector_index",
-                //     path: "embedding",
-                //     queryVector:queryEmbedding,
-                //     numCandidates: 50,
-                //     limit: 5
-                // }
                 $search:{
                     index:"text_search_index",
                     text:{
@@ -174,6 +167,49 @@ export const SearchSimilarChunks=async(req,resp)=>{
         });
     }
 }
+export const filterSearch=async(req,resp)=>{
+     try {
+        const { query,category } = req.body;
+
+        const queryEmbedding = await generateEmbedding(query);
+
+        const results = await Embedding.aggregate([
+            {
+                $vectorSearch: {
+                    index: "vector_index",
+                    path: "embedding",
+                    queryVector: queryEmbedding,
+                    numCandidates: 50,
+                    limit: 5,
+                    filter: {
+                        category:category
+                    }
+                }
+            },
+            {
+                $project: {
+                    text: 1,
+                    source: 1,
+                    page: 1,
+                    score: {
+                        $meta: "vectorSearchScore"
+                    }
+                }
+            }
+        ]);
+
+        return resp.json({
+            results
+        });
+
+    } catch (err) {
+        console.log(err);
+
+        return resp.status(500).json({
+            error: "Filtered search failed"
+        });
+    }
+};
 
 
 export const ragChat = async (req, resp) => {
@@ -409,57 +445,12 @@ export const dechat=async(req,resp)=>{
     }
 }
 
-export const searchByChunks=async(req,resp)=>{
-    const{query}=req.body
-    const queryEmbedding=await generateEmbedding(query)
-    const vectorResults=await Embedding.aggregate([
-        {
-            $vectorSearch:{
-                index:"vector_index",
-                path:"embedding",
-                queryVector:queryEmbedding,
-                numCandidates:50,
-                limit:5
-            }
-        },
-        {
-            $project:{
-                text:1,
-                score:{
-                    $meta:"vectorSearchScore"
-                }
-            }
-        }
-    ]);
-    const KeyWordResults=await Embedding.aggregate([
-        {
-            $search:{
-                index:"text_search_index",
-                text:{
-                    query:query,
-                    path:"text"
-                }
-            }
-        },{
-            $project:{
-                text:1,
-                score:{
-                    $meta:"searchScore"
-                }
-            }
-        },{
-            $limit: 5
-        }
-    ])
-    resp.json({
-            vectorResults,
-            KeyWordResults
-        })
-}
 
 export const reciprocalRankFusuion=(vectorResults,KeyWordResults,k=60)=>{
     const scores=new Map();
     const addResults=(results)=>{
+            console.log("RRF INPUT:", results);
+    console.log("IS ARRAY:", Array.isArray(results));
         results.forEach((result,index)=>{
             const rank=index+1;
             const rrfScore=1/(k+rank)
@@ -474,6 +465,79 @@ export const reciprocalRankFusuion=(vectorResults,KeyWordResults,k=60)=>{
     score
 })).sort((a,b)=>b.score-a.score)
 }
+export const HybridSearch = async (req, resp) => {
+    try {
+
+        const { query } = req.body;
+
+        const queryEmbedding = await generateEmbedding(query);
+
+        // Vector Search
+        const vectorResults = await Embedding.aggregate([
+            {
+                $vectorSearch: {
+                    index: "vector_index",
+                    path: "embedding",
+                    queryVector: queryEmbedding,
+                    numCandidates: 50,
+                    limit: 5
+                }
+            },
+            {
+                $project: {
+                    text: 1,
+                    score: {
+                        $meta: "vectorSearchScore"
+                    }
+                }
+            }
+        ]);
+
+        // Keyword Search
+        const KeyWordResults = await Embedding.aggregate([
+            {
+                $search: {
+                    index: "text_search_index",
+                    text: {
+                        query: query,
+                        path: "text"
+                    }
+                }
+            },
+            {
+                $project: {
+                    text: 1,
+                    score: {
+                        $meta: "searchScore"
+                    }
+                }
+            },
+            {
+                $limit: 5
+            }
+        ]);
+
+        // RRF
+        const fusedResults = reciprocalRankFusuion(
+            vectorResults,
+            KeyWordResults
+        );
+
+        return resp.json({
+            vectorResults,
+            KeyWordResults,
+            fusedResults
+        });
+
+    } catch (err) {
+
+        console.log(err);
+
+        return resp.status(500).json({
+            error: "Hybrid search failed"
+        });
+    }
+};
 
 export const functionCallController=async(req,resp)=>{
     try{
@@ -523,7 +587,7 @@ export const functionCallControllers=async(req,resp)=>{
 export const weatherController=async(req,resp)=>{
     try{
         const{query}=req.body
-        const response=weatherTool(query)
+        const response=await weatherTool(query)
         console.log("Response",response)
         const functionCall=response.functionCalls?.[0];
         if(!functionCall){
@@ -621,3 +685,97 @@ export const AgentkeThrough=async(req,resp)=>{
         });
     }
 }
+
+export const analyzeImageController=async(req,resp)=>{
+    try{
+        const{imageBase64,question}=req.body
+        const answer=await analyzeImage(imageBase64,question)
+        return resp.json({
+            answer
+        })
+    }catch(err){
+        console.log(err)
+
+        return resp.status(500).json({
+            error: "Image analysis failed"
+        });
+    }
+}
+
+export const imageAns=async(req,resp)=>{
+    try{
+        const{imageBase64,question}=req.body
+
+        const answer=await analyzeImageStructure(imageBase64,question)
+        return resp.json({
+            answer
+        })
+    }catch(err){
+        console.log(err);
+
+        return resp.status(500).json({
+            error: "Structured image analysis failed"
+        });
+    }
+}
+
+export const analyzePDFController = async (req, resp) => {
+    try {
+
+        const { pdfBase64, question } = req.body;
+
+        console.log("PDF BASE64:", pdfBase64 ? "RECEIVED" : "MISSING");
+        console.log("QUESTION:", question);
+
+        const answer = await analyzePDF(
+            pdfBase64,
+            question
+        );
+
+        return resp.json({
+            answer
+        });
+
+    } catch (err) {
+        console.log(err);
+
+        return resp.status(500).json({
+            error: "PDF analysis failed"
+        });
+    }
+};
+
+export const pdfStore=async(req,resp)=>{
+    try{
+        const{filePath}=req.body
+        const result=await extractPdfText(filePath)
+         return resp.json({
+            message: "PDF processed successfully",
+            result
+        });
+    }catch(err){
+        console.log(err)
+
+        return resp.status(500).json({
+            error: "PDF processing failed"
+        });
+    }
+}
+export const pdfRagController = async (req, resp) => {
+    try {
+
+        const { query, filePath } = req.body;
+
+        const result = await pdfRag(query, filePath);
+
+        return resp.json(result);
+
+    } catch (err) {
+
+        console.log(err);
+
+        return resp.status(500).json({
+            error: "PDF RAG failed"
+        });
+    }
+};
