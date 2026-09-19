@@ -323,10 +323,14 @@ Rules:
 
 User request:
 ${query}
-        `
+        `,
+        config: {
+            responseMimeType: "application/json"
+        }
     });
 
-    return JSON.parse(response.text);
+    const cleanText = response.text.replace(/```json|```/g, "").trim();
+    return JSON.parse(cleanText);
 };
 
 export const executePlan=async(plan)=>{
@@ -364,50 +368,47 @@ export const agentLoop=async(query)=>{
             config:{
                 tools:[
                     {
-                    name:"addNumbers",
-                    description:"add two nos",
-
-                    parameters: {
-                        type:"OBJECT",
-
-                        parameters:{
-                            a:{
-                                type:"NUMBER"
-                            },
-                            b:{
-                                type:"NUMBER"
-                            }
-                        },
-                        required: ["a","b"]
-                    }
-                    },
-                    {
-                        name: "getWeather",
-                        description: "get current weather information for a city",
-
-                        parameters:{
-                            type:"OBJECT",
-                            parameters:{
-                                city:{
-                                    type:"STRING"
+                        functionDeclarations: [
+                            {
+                                name:"addNumbers",
+                                description:"add two numbers together",
+                                parameters: {
+                                    type:"OBJECT",
+                                    properties:{
+                                        a:{ type:"NUMBER", description: "first number" },
+                                        b:{ type:"NUMBER", description: "second number" }
+                                    },
+                                    required: ["a","b"]
                                 }
                             },
-                            required: ["city"]
-                        }
+                            {
+                                name: "getWeather",
+                                description: "get current weather information for a city",
+                                parameters:{
+                                    type:"OBJECT",
+                                    properties:{
+                                        city:{ type:"STRING", description: "city name" }
+                                    },
+                                    required: ["city"]
+                                }
+                            }
+                        ]
                     }
-                    
-                    
                 ]
             }
         })
         const functionCalling=response.functionCalls?.[0]  
-            console.log("FUNCTION CALL:", functionCalling);
+        console.log("FUNCTION CALL:", functionCalling);
 
         // No tool call = final answer
         if (!functionCalling) {
             return response.text;
         }
-        const tool=tools[functionCalling.args]
+        const tool=tools[functionCalling.name]
+
+        if (!tool) {
+            throw new Error(`Tool not found: ${functionCalling.name}`);
+        }
 
         const result=await tool(...Object.values(functionCalling.args))
 
@@ -426,8 +427,7 @@ export const agentLoop=async(query)=>{
                 }
             ]
         })
-        }
-
+    }
 }
 export const analyzeImage=async(imageBase64,question)=>{
     const response=await ai.models.generateContent({
@@ -520,6 +520,7 @@ export const extractPdfText=async(filePath)=>{
 
 export const pdfRag=async(query,filePath)=>{
     const queryEmbedding=await generateEmbedding(query)
+    const cleanPath = filePath.replace(/^\.\//, '')
 
     const results=await Embedding.aggregate([
         {
@@ -530,7 +531,7 @@ export const pdfRag=async(query,filePath)=>{
                 numCandidates:50,
                 limit:5,
                 filter:{
-                    source:filePath
+                    source: { $in: [cleanPath, `./${cleanPath}`] }
                 }
             }
         }

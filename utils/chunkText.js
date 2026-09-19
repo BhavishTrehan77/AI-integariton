@@ -7,8 +7,8 @@ export const chunkText=(text,textSize,overlap)=>{
     return chunks
 }
 
-const text = "abcdefghijklmnopqrstuvwxyz";
-console.log(chunkText(text, 5,3));
+// const text = "abcdefghijklmnopqrstuvwxyz";
+// console.log(chunkText(text, 5,3));
 
 export const chunkTextByWords=(text,textSize,overlap)=>{
     const words=text.trim().split(/\s/)
@@ -19,9 +19,9 @@ export const chunkTextByWords=(text,textSize,overlap)=>{
     }
     return chunks;
 }
-const text2 = "AI is a very powerful technology used in modern applications";
+// const text2 = "AI is a very powerful technology used in modern applications";
+// console.log(chunkTextByWords(text2, 5, 2));
 
-console.log(chunkTextByWords(text2, 5, 2));
 
 
 

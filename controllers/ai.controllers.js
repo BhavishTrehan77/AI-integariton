@@ -14,6 +14,9 @@ export const chat=async(req,resp)=>{
         })
     }catch(err){
         console.log(err); 
+        resp.status(500).json({
+            error: "Chat failed"
+        })
     }
 }
 
@@ -25,6 +28,9 @@ export const answer=async(req,resp)=>{
     resp.json(ans)
     }catch(err){
         console.log(err)
+        resp.status(500).json({
+            error: "Answer failed"
+        })
     }
 }
 
@@ -55,6 +61,9 @@ export const chatEmbedding=async(req,resp)=>{
     resp.json(data)
     }catch(err){
         console.log(err)
+        resp.status(500).json({
+            error: "Embedding failed"
+        })
     }
     
 }
@@ -664,7 +673,7 @@ export const planningController=async(req,resp)=>{
     })
     }catch(err){
         console.log(err)
-        return resp.json({
+        return resp.status(500).json({
             error:"planning failed"
         })
     }
