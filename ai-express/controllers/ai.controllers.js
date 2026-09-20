@@ -88,7 +88,7 @@ export const createEmbedding=async(req,resp)=>{
 export const createChunkEmbedding=async(req,resp)=>{
     try{
        const{text}=req.body
-        const chunks=await chunkTextByWords(text,5,2)
+        const chunks=await chunkTextByWords(text,100,20)
         const result=[]
         for (const chunk of chunks){
             const embedding=await generateEmbedding(chunk)
@@ -114,7 +114,7 @@ export const createChunkEmbedding=async(req,resp)=>{
 export const GenerateChunkEmbedding=async(req,resp)=>{
     try{
     const{text,category,source}=req.body
-    const chunks=chunkTextByWords(text,5,2)
+    const chunks=chunkTextByWords(text,100,20)
     const result=[]
     for(const chunk of chunks){
         const embedding=await generateEmbedding(chunk)
