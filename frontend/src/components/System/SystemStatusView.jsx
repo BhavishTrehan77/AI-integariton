@@ -29,7 +29,7 @@ export default function SystemStatusView({ systemStatus, setSystemStatus }) {
     { name: 'Gemini Models (Flash 3.5 & 3.6)', status: 'Connected', badge: 'Active', latency: '240ms', icon: Sparkles, color: '#818cf8' },
     { name: 'Express API Server (:3000)', status: systemStatus.connected ? 'Connected' : 'Offline', badge: systemStatus.connected ? 'Online' : 'Error', latency: `${systemStatus.latency || 15}ms`, icon: Server, color: '#38bdf8' },
     { name: 'MongoDB Atlas Connection', status: 'Connected', badge: 'Active', latency: '45ms', icon: Database, color: '#34d399' },
-    { name: 'Atlas Vector Search ($vectorSearch)', status: 'Active (Index: vector_index)', badge: '768 Dimensions', latency: '12ms', icon: Database, color: '#34d399' },
+    { name: 'Atlas Vector Search ($vectorSearch)', status: 'Active (Index: vector_index)', badge: '3072 Dimensions', latency: '12ms', icon: Database, color: '#34d399' },
     { name: 'Atlas BM25 Search ($search)', status: 'Active (Index: text_search_index)', badge: 'Lucene Analyzer', latency: '8ms', icon: Database, color: '#34d399' },
     { name: 'AI Tool Registry (getWeather, addNumbers)', status: 'Active', badge: '2 Tools Loaded', latency: '<1ms', icon: Cpu, color: '#22d3ee' },
   ];

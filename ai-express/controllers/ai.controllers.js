@@ -406,74 +406,73 @@ export const echat = async (req, resp) => {
 
 
 
-export const dechat=async(req,resp)=>{
-    try{
-        const{query}=req.body
-        const rewrittenQuery=await rewriteQuery(query)
-        console.log(rewrittenQuery)
-        const allResults=[]
-        for(const searchQuery of expandQuery){
-            const queryEmbedding=await queryEmbedding(searchQuery)
-            const results=Embedding.aggregate([
+export const dechat = async (req, resp) => {
+    try {
+        const { query } = req.body;
+        const rewrittenQuery = await rewriteQuery(query);
+        console.log("Rewritten Query:", rewrittenQuery);
+        const expandedQueries = await expandQuery(rewrittenQuery);
+        const allResults = [];
+        for (const searchQuery of expandedQueries) {
+            const queryEmbedding = await generateEmbedding(searchQuery);
+            const results = await Embedding.aggregate([
                 {
-                    $vectorSearch:{
-                        index:"vector_index",
-                        path:"embedding",
-                        queryVector:queryEmbedding,
-                        numCandidates:50,
-                        limit:5
+                    $vectorSearch: {
+                        index: "vector_index",
+                        path: "embedding",
+                        queryVector: queryEmbedding,
+                        numCandidates: 50,
+                        limit: 5
                     },
-                },{
-                    $project:{
-                        text:1,
-                        score:{
-                            $meta:vectorSearchScore
+                }, {
+                    $project: {
+                        text: 1,
+                        score: {
+                            $meta: "vectorSearchScore"
                         }
                     }
                 }
-            ])
-            allResults.push(...results)
-
+            ]);
+            allResults.push(...results);
         }
-        console.log(allResults.length)
-        const uniqueResults=[
-            ...new Map(allResults.map(results=>[results.text,results])).values()
-        ]
-        const Relevent=uniqueResults.filter(result=>result.score>=0.5).sort((a,b)=>b.score-a.score)
-        const context=Relevent.map(result=>result.text).join("\n")
-        const prompt=`heyy ai answer it by taking context context is ${context} ans you have to answer the query and query is ${query} Only answer on the basis of context `
-        const ans=await generateTextResponse(prompt)
-        resp.json({
-            ans
-        })
-
-
-        
-    }catch(err){
-        console.log(err)
+        const uniqueResults = [
+            ...new Map(allResults.map(res => [res.text, res])).values()
+        ];
+        const relevant = uniqueResults.filter(result => result.score >= 0.5).sort((a, b) => b.score - a.score);
+        const context = relevant.map(result => result.text).join("\n");
+        const prompt = `Hey AI, answer the query taking this context into account. Context: ${context}. Query: ${query}. Only answer on the basis of context.`;
+        const ans = await generateTextResponse(prompt);
+        return resp.json({
+            ans,
+            results: relevant
+        });
+    } catch (err) {
+        console.error("dechat error:", err);
+        return resp.status(500).json({ error: "dechat failed" });
     }
-}
+};
 
-
-export const reciprocalRankFusuion=(vectorResults,KeyWordResults,k=60)=>{
-    const scores=new Map();
-    const addResults=(results)=>{
-            console.log("RRF INPUT:", results);
-    console.log("IS ARRAY:", Array.isArray(results));
-        results.forEach((result,index)=>{
-            const rank=index+1;
-            const rrfScore=1/(k+rank)
-            const currentScore=scores.get(result.text)||0
-            scores.set(result.text,currentScore+rrfScore)
-        })
-    }
-    addResults(vectorResults)
-    addResults(KeyWordResults)
+export const reciprocalRankFusion = (vectorResults, KeyWordResults, k = 60) => {
+    const scores = new Map();
+    const addResults = (results) => {
+        if (!Array.isArray(results)) return;
+        results.forEach((result, index) => {
+            const rank = index + 1;
+            const rrfScore = 1 / (k + rank);
+            const currentScore = scores.get(result.text) || 0;
+            scores.set(result.text, currentScore + rrfScore);
+        });
+    };
+    addResults(vectorResults);
+    addResults(KeyWordResults);
     return [...scores.entries()].map(([text, score]) => ({
-    text,
-    score
-})).sort((a,b)=>b.score-a.score)
-}
+        text,
+        score
+    })).sort((a, b) => b.score - a.score);
+};
+
+// Backwards-compatible alias for any legacy callers
+export const reciprocalRankFusuion = reciprocalRankFusion;
 export const HybridSearch = async (req, resp) => {
     try {
 

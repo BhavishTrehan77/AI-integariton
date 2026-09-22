@@ -200,8 +200,45 @@ export async function queryPdfRag(query, filePath = 'uploads/class12th.pdf') {
 }
 
 /**
- * Upload PDF and trigger backend indexing into MongoDB
- * Endpoint: /api/upload-pdf (handled by Vite middleware to write to uploads/ and call storepdfthings)
+ * Upload PDF directly with Multer memoryStorage
+ * Directly posts binary multipart/form-data to /api/v1/upload-docs
+ * @param {File} file
+ */
+export async function uploadDocument(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE}/upload-docs`, {
+    method: 'POST',
+    body: formData
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Upload failed with status ${response.status}`);
+  }
+  return await response.json();
+}
+
+/**
+ * Query Vector RAG across documents
+ * Endpoint: /api/v1/rag-ans
+ * @param {string} query
+ */
+export async function queryRag(query) {
+  const response = await fetch(`${API_BASE}/rag-ans`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `RAG query failed with status ${response.status}`);
+  }
+  return await response.json();
+}
+
+/**
+ * Upload PDF and trigger backend indexing into MongoDB (Legacy/Fallback)
+ * Endpoint: /api/upload-pdf
  */
 export async function uploadAndIndexPdf(filename, base64) {
   const response = await fetch('/api/upload-pdf', {

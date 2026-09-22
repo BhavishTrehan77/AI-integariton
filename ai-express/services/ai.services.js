@@ -4,7 +4,7 @@ import { chunkTextByWords } from "../utils/chunkText.js";
 import fs from "fs";
 import { PDFParse } from "pdf-parse";
 import Embedding from "../models/embedding.models.js";
-import { parse } from "path";
+import path, { parse } from "path";
 
 const taskSchema=z.object({
     title:z.string(),
@@ -547,5 +547,6 @@ say "I don't know based on the provided PDF."
     return response.text
 }
 
-
-
+// Aliases matching document service conventions
+export const GenerateEmbedding = generateEmbedding;
+export const GeneratePromptResponse = generateTextResponse;

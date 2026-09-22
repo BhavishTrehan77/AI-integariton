@@ -14,8 +14,8 @@ import {
   RefreshCw,
   Plus
 } from 'lucide-react';
-import { fileToBase64, formatBytes } from '../../utils/fileHelpers';
-import { queryPdfRag, analyzeDirectPdf, processAndStorePdf, uploadAndIndexPdf } from '../../api/client';
+import { formatBytes, fileToBase64 } from '../../utils/fileHelpers';
+import { queryPdfRag, queryRag, uploadDocument, analyzeDirectPdf, processAndStorePdf, uploadAndIndexPdf } from '../../api/client';
 import { renderMarkdown } from '../../utils/markdown';
 
 export default function KnowledgeBaseView() {
@@ -59,18 +59,17 @@ export default function KnowledgeBaseView() {
     try {
       setUploadingAndIndexing(true);
       setError(null);
-      setIndexingMsg(`Reading ${file.name}...`);
+      setIndexingMsg(`Uploading & indexing ${file.name} via Multer memory buffer...`);
       
       const { base64 } = await fileToBase64(file);
       setPdfBase64(base64);
 
-      setIndexingMsg(`Saving & creating MongoDB vector embeddings for ${file.name}...`);
-      const uploadRes = await uploadAndIndexPdf(file.name, base64);
+      const uploadRes = await uploadDocument(file);
       
-      const chunksCount = uploadRes.backendResult?.result?.length || 'Multiple';
+      const chunksCount = uploadRes.chunksCreated || 'Multiple';
       const newDoc = {
         name: file.name,
-        path: uploadRes.filePath,
+        path: file.name,
         size: formatBytes(file.size),
         status: 'Processed ✓',
         chunks: chunksCount,
@@ -78,7 +77,7 @@ export default function KnowledgeBaseView() {
       };
 
       setDocuments(prev => [newDoc, ...prev.map(d => ({ ...d, active: false }))]);
-      setActiveDocPath(uploadRes.filePath);
+      setActiveDocPath(file.name);
       setActiveDocName(file.name);
       setIndexingMsg(`✓ Successfully indexed ${file.name} (${chunksCount} chunks stored in MongoDB)!`);
       setTimeout(() => setIndexingMsg(''), 6000);
@@ -116,10 +115,16 @@ export default function KnowledgeBaseView() {
 
     try {
       if (qaMode === 'rag') {
-        // Run PDF RAG Vector Search with active document path
-        const res = await queryPdfRag(q, activeDocPath);
+        // Run PDF RAG Vector Search via /api/v1/rag-ans
+        let res;
+        try {
+          res = await queryRag(q);
+        } catch (ragErr) {
+          console.warn('Standard RAG fallback:', ragErr);
+          res = await queryPdfRag(q, activeDocPath);
+        }
         setAnswer({
-          text: typeof res === 'string' ? res : res.text || JSON.stringify(res),
+          text: typeof res === 'string' ? res : (res.answer || res.text || JSON.stringify(res)),
           sourceDoc: activeDocName,
           sourcePath: activeDocPath,
           mode: 'Vector RAG Search',
