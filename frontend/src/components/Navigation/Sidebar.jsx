@@ -10,7 +10,8 @@ import {
   Trash2,
   Cpu,
   Layers,
-  Sparkles
+  Sparkles,
+  LogOut
 } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -21,7 +22,9 @@ export default function Sidebar({
   onSelectSession, 
   onNewChat, 
   onDeleteSession,
-  systemStatus
+  systemStatus,
+  user,
+  onLogout
 }) {
   const navItems = [
     { id: 'chat', label: 'Main Chat', icon: MessageSquare, badge: 'Core' },
@@ -278,6 +281,87 @@ export default function Sidebar({
           </div>
         )}
       </div>
+
+      {/* Logged-in User Profile & Sign Out */}
+      {user && (
+        <div style={{
+          padding: '12px 16px',
+          borderTop: '1px solid var(--border-subtle)',
+          backgroundColor: 'rgba(255, 255, 255, 0.02)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: 'var(--grad-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
+            }}>
+              {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+            </div>
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                color: '#f8fafc',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {user.name || user.email}
+              </div>
+              <div style={{
+                fontSize: '0.7rem',
+                color: 'var(--text-muted)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {user.email}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onLogout}
+            title="Sign Out"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '6px',
+              padding: '6px',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all var(--transition-fast)'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = '#fb7185';
+              e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.3)';
+              e.currentTarget.style.backgroundColor = 'rgba(244, 63, 94, 0.1)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--text-muted)';
+              e.currentTarget.style.borderColor = 'var(--border-subtle)';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <LogOut size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Backend & Environment Footer */}
       <div style={{

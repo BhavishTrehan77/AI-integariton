@@ -219,15 +219,16 @@ export async function uploadDocument(file) {
 }
 
 /**
- * Query Vector RAG across documents
+ * Query Vector RAG across documents (supports document/filename filter)
  * Endpoint: /api/v1/rag-ans
  * @param {string} query
+ * @param {string} [source]
  */
-export async function queryRag(query) {
+export async function queryRag(query, source = null) {
   const response = await fetch(`${API_BASE}/rag-ans`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query })
+    body: JSON.stringify({ query, source })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));

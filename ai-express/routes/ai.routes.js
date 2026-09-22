@@ -1,8 +1,31 @@
 import express from 'express'
-import {AgentkeThrough, analyzeImageController, analyzePDFController, Answer, answer, chat, chatEmbedding, chatStream, createChunkEmbedding, createEmbedding, echat, filterSearch, functionCallControllers, GenerateChunkEmbedding, HybridSearch, KeywordSearch, pdfRagController, pdfStore, planningController, ragChat, reciprocalRankFusuion, weatherController } from '../controllers/ai.controllers.js'
-import { analyzePDF, pdfRag } from '../services/ai.services.js'
+import {
+    AgentkeThrough,
+    analyzeImageController,
+    analyzePDFController,
+    Answer,
+    answer,
+    chat,
+    chatEmbedding,
+    chatStream,
+    createChunkEmbedding,
+    createEmbedding,
+    echat,
+    filterSearch,
+    functionCallControllers,
+    GenerateChunkEmbedding,
+    HybridSearch,
+    KeywordSearch,
+    pdfRagController,
+    pdfStore,
+    planningController,
+    ragChat,
+    reciprocalRankFusuion,
+    weatherController,
+    uploadDocs,
+    RAns
+} from '../controllers/ai.controllers.js'
 import upload from '../middlewares/upload.middleware.js'
-import { uploadDocs, RAns } from '../controllers/document.controller.js'
 
 
 

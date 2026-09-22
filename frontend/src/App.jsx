@@ -7,9 +7,13 @@ import RagExplorerView from './components/AdvancedRAG/RagExplorerView';
 import AgentStudioView from './components/Tools/AgentStudioView';
 import VisionView from './components/Vision/VisionView';
 import SystemStatusView from './components/System/SystemStatusView';
+import AuthPage from './components/Auth/AuthPage';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { checkSystemHealth } from './api/client';
 
-export default function App() {
+function MainApp() {
+  const { user, isAuthenticated, logout } = useAuth();
+
   const [currentTab, setCurrentTab] = useState('chat');
   const [chatMode, setChatMode] = useState('general'); // 'general', 'rag', 'agent'
 
@@ -131,6 +135,11 @@ export default function App() {
     }
   };
 
+  // If user is not logged in, display the AuthPage (Signup & Login)
+  if (!isAuthenticated) {
+    return <AuthPage />;
+  }
+
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       {/* Sidebar Navigation */}
@@ -143,6 +152,8 @@ export default function App() {
         onNewChat={handleNewChat}
         onDeleteSession={handleDeleteSession}
         systemStatus={systemStatus}
+        user={user}
+        onLogout={logout}
       />
 
       {/* Main Content Area */}
@@ -153,6 +164,8 @@ export default function App() {
           setChatMode={setChatMode}
           onClearChat={handleClearCurrentChat}
           systemStatus={systemStatus}
+          user={user}
+          onLogout={logout}
         />
 
         {/* Dynamic Tab Views */}
@@ -192,5 +205,13 @@ export default function App() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }

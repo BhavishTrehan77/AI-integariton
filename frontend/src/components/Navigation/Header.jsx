@@ -1,7 +1,7 @@
 import React from 'react';
-import { Sparkles, Terminal, BookOpen, ShieldCheck, Zap, RefreshCw } from 'lucide-react';
+import { Sparkles, Terminal, BookOpen, ShieldCheck, Zap, RefreshCw, LogOut } from 'lucide-react';
 
-export default function Header({ currentTab, chatMode, setChatMode, onClearChat, systemStatus }) {
+export default function Header({ currentTab, chatMode, setChatMode, onClearChat, systemStatus, user, onLogout }) {
   const titles = {
     chat: {
       title: 'AI Knowledge Assistant',
@@ -150,8 +150,8 @@ export default function Header({ currentTab, chatMode, setChatMode, onClearChat,
           color: 'var(--text-secondary)',
           fontFamily: 'var(--font-mono)'
         }}>
-          <span className={`status-dot ${systemStatus.connected ? 'active' : 'danger'}`} />
-          <span>{systemStatus.latency ? `${systemStatus.latency}ms` : 'Ready'}</span>
+          <span className={`status-dot ${systemStatus?.connected ? 'active' : 'danger'}`} />
+          <span>{systemStatus?.latency ? `${systemStatus.latency}ms` : 'Ready'}</span>
         </div>
 
         {/* Clear Chat button */}
@@ -176,6 +176,65 @@ export default function Header({ currentTab, chatMode, setChatMode, onClearChat,
             <RefreshCw size={13} />
             <span>Reset</span>
           </button>
+        )}
+
+        {/* Logged in User Profile & Sign Out */}
+        {user && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '4px 10px',
+            borderRadius: 'var(--radius-full)',
+            backgroundColor: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid var(--border-subtle)',
+            marginLeft: '4px'
+          }}>
+            <div style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '50%',
+              background: 'var(--grad-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              fontSize: '0.72rem',
+              fontWeight: 700
+            }}>
+              {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+            </div>
+            <span style={{
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              maxWidth: '120px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {user.name || user.email}
+            </span>
+            <button
+              onClick={onLogout}
+              title="Sign Out"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '3px',
+                borderRadius: '4px',
+                transition: 'color var(--transition-fast)'
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#fb7185'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
         )}
       </div>
     </header>

@@ -14,7 +14,7 @@ const embeddingSchema=new mongoose.Schema({
     },
     source:{
         type:String
-    }
+    },
 })
 
 

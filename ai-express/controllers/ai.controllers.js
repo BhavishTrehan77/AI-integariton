@@ -1,7 +1,7 @@
 import { properties } from "zod"
 import { ai } from "../config/ai.js"
 import Embedding from "../models/embedding.models.js"
-import { addNumbers, agent, agentLoop, analyzeImage, analyzeImageStructure, analyzePDF, createPlan, executePlan, expandQuery,extractPdfText,functionCalling, generateAi, generateAIResponse, generateAIStream, generateEmbedding, generateTextResponse, getWeather, pdfRag, rewriteQuery, tools, weatherTool } from "../services/ai.services.js"
+import { addNumbers, agent, agentLoop, analyzeImage, analyzeImageStructure, analyzePDF, createPlan, executePlan, expandQuery, extractPdfText, functionCalling, generateAi, generateAIResponse, generateAIStream, generateEmbedding, generateTextResponse, getWeather, pdfRag, rewriteQuery, tools, weatherTool, processPdf, ProcessPdf, RagAnss } from "../services/ai.services.js"
 import { chunkTextByWords } from "../utils/chunkText.js"
 
 
@@ -223,60 +223,122 @@ export const filterSearch=async(req,resp)=>{
 
 export const ragChat = async (req, resp) => {
     try {
-        const { query } = req.body;
-        const rewrittenQuery=await rewriteQuery(query);
+        const { query, source, filename } = req.body;
+        const targetDoc = source || filename;
+        const cleanName = targetDoc ? targetDoc.replace(/^.*[\\\/]/, '').trim() : null;
+
+        const rewrittenQuery = await rewriteQuery(query);
         console.log("Original Query:", query);
-console.log("Rewritten Query:", rewrittenQuery);
+        console.log("Rewritten Query:", rewrittenQuery);
+        console.log("Target Document Filter:", cleanName);
+
         const queryEmbedding = await generateEmbedding(rewrittenQuery);
 
-        // 2. Search similar chunks
-        const results = await Embedding.aggregate([
-            {
-                $vectorSearch: {
-                    index: "vector_index",
-                    path: "embedding",
-                       queryVector: queryEmbedding,
-                   
-                    numCandidates: 50,
-                    limit: 5
+        const vectorSearchStage = {
+            index: "vector_index",
+            path: "embedding",
+            queryVector: queryEmbedding,
+            numCandidates: 50,
+            limit: 5
+        };
+
+        if (cleanName) {
+            vectorSearchStage.filter = {
+                source: {
+                    $in: [cleanName, `uploads/${cleanName}`, `./uploads/${cleanName}`, targetDoc]
                 }
-            },
-            {
-                $project: {
-                    text: 1,
-                    score: {
-                        $meta: "vectorSearchScore"
+            };
+        }
+
+        let results = [];
+        try {
+            results = await Embedding.aggregate([
+                {
+                    $vectorSearch: vectorSearchStage
+                },
+                {
+                    $project: {
+                        text: 1,
+                        source: 1,
+                        score: {
+                            $meta: "vectorSearchScore"
+                        }
                     }
                 }
+            ]);
+        } catch (err) {
+            console.warn("Atlas filter failed in ragChat, falling back to post-filtering:", err.message);
+            const fallback = await Embedding.aggregate([
+                {
+                    $vectorSearch: {
+                        index: "vector_index",
+                        path: "embedding",
+                        queryVector: queryEmbedding,
+                        numCandidates: 100,
+                        limit: 30
+                    }
+                },
+                {
+                    $project: {
+                        text: 1,
+                        source: 1,
+                        score: {
+                            $meta: "vectorSearchScore"
+                        }
+                    }
+                }
+            ]);
+
+            if (cleanName) {
+                const filtered = fallback.filter(doc => {
+                    if (!doc.source) return false;
+                    const docBase = doc.source.replace(/^.*[\\\/]/, '').trim().toLowerCase();
+                    return docBase === cleanName.toLowerCase() || doc.source.toLowerCase().includes(cleanName.toLowerCase());
+                });
+                results = filtered.length > 0 ? filtered.slice(0, 5) : fallback.slice(0, 5);
+            } else {
+                results = fallback.slice(0, 5);
             }
-        ]);
+        }
 
-        // 3. Keep only relevant chunks
-        const relevantResult = results.filter(
-            result => result.score >= 0.5
-        );
+        // 3. Keep top relevant chunks (adaptive threshold instead of dropping everything below 0.5)
+        let relevantResult = results.filter(result => result.score >= 0.35);
+        if (relevantResult.length === 0 && results.length > 0) {
+            relevantResult = results.slice(0, 5);
+        }
 
+        // Direct document fallback if vector search returned 0 chunks
+        if (relevantResult.length === 0 && cleanName) {
+            const escapeRegex = cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const directChunks = await Embedding.find({
+                source: { $regex: escapeRegex, $options: 'i' }
+            }).limit(6).select('text source');
+            if (directChunks.length > 0) {
+                relevantResult = directChunks;
+            }
+        }
 
         // 5. Create context from relevant chunks
         const context = relevantResult
             .map(result => result.text)
-            .join("\n");
+            .filter(Boolean)
+            .join("\n\n");
 
-        // 6. Create prompt for LLM
-        const prompt = `
-            You are answering a question from a database.
+        // 6. Create helpful prompt for LLM
+        const prompt = `You are an AI document analysis assistant.
+Document: "${cleanName || 'Uploaded Document'}"
 
-Here is the database information:
-
+Document Content:
+---
 ${context}
+---
 
-Question:
-${query}
+Question: ${query}
 
-Answer the question using the database information above.
-
-Do not say you don't know if the information is present above.
-        `;
+Instructions:
+1. Provide a direct, detailed, and accurate answer based on the document content above.
+2. If the user asks for a summary or what information is in the document, synthesize the key information, data, and sections.
+3. Do not say "I don't know" if the document content above contains relevant facts or details that can answer the question.`;
 
         // 7. Generate final answer
         const answer = await generateTextResponse(prompt);
@@ -284,7 +346,7 @@ Do not say you don't know if the information is present above.
         // 8. Send response
         resp.json({
             answer,
-            results
+            results: relevantResult
         });
 
     } catch (err) {
@@ -352,37 +414,43 @@ export const echat = async (req, resp) => {
         console.log("After Deduplication:", uniqueResults.length);
         console.log(uniqueResults)
         //this will retrieve the new result from the following and all the results will be unique
-        // 5. Remove low-score results
-        const relevantResults = uniqueResults.filter(
-            result => result.score >= 0.5
-        ).sort((a,b)=>b.score-a.score).slice(0,5)
+        // 5. Select top relevant results adaptively (avoid dropping all chunks if scores are ~0.45)
+        let relevantResults = uniqueResults.filter(
+            result => (result.score || 0) >= 0.35
+        ).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5);
 
-        // 6. If nothing relevant was found
-        if (uniqueResults.length === 0) {
+        if (relevantResults.length === 0 && uniqueResults.length > 0) {
+            relevantResults = uniqueResults.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5);
+        }
+
+        // 6. If nothing was found at all
+        if (relevantResults.length === 0) {
             return resp.json({
-                answer: "I don't know based on the available context.",
-                results: uniqueResults
+                answer: "No relevant content was found in the indexed database for this query.",
+                results: []
             });
         }
 
         // 7. Create context
         const context = relevantResults
             .map(result => result.text)
-            .join("\n");
+            .filter(Boolean)
+            .join("\n\n");
 
-        // 8. Create final prompt
-        const prompt = `
-            Answer the user's question using the provided context.
+        // 8. Create helpful prompt
+        const prompt = `You are an expert AI analysis assistant.
+Answer the user's question clearly and helpfully using the provided context below.
 
-            Context:
-            ${context}
+Context:
+${context}
 
-            User Question:
-            ${query}
+User Question:
+${query}
 
-            If the answer is not present in the context,
-            say you do not know.
-        `;
+Instructions:
+1. Provide a comprehensive, accurate answer synthesized from the context.
+2. If the user asks for a summary or general info, explain the main points, numbers, and data present in the context.
+3. Do not refuse to answer if the context contains relevant information.`;
 
         // 9. Generate answer
         const answer = await generateTextResponse(prompt);
@@ -771,19 +839,68 @@ export const pdfStore=async(req,resp)=>{
 }
 export const pdfRagController = async (req, resp) => {
     try {
-
-        const { query, filePath } = req.body;
-
-        const result = await pdfRag(query, filePath);
-
+        const { query, filePath, source } = req.body;
+        const target = source || filePath;
+        const result = await pdfRag(query, target);
+        if (typeof result === 'string') {
+            return resp.json({
+                answer: result,
+                data: result,
+                source: target
+            });
+        }
         return resp.json(result);
-
     } catch (err) {
-
         console.log(err);
-
         return resp.status(500).json({
             error: "PDF RAG failed"
+        });
+    }
+};
+
+export const uploadDocs = async (req, resp) => {
+    try {
+        if (!req.file) {
+            return resp.status(400).json({
+                message: "File is required"
+            });
+        }
+        const documents = await processPdf(req.file.buffer, req.file.originalname);
+        return resp.status(200).json({
+            message: "PDF processed successfully",
+            chunksCreated: documents.length,
+            filename: req.file.originalname
+        });
+    } catch (err) {
+        console.error(err);
+        return resp.status(500).json({
+            message: err.message
+        });
+    }
+};
+
+export const RAns = async (req, resp) => {
+    try {
+        const { query, source, filename, filePath } = req.body;
+        if (!query) {
+            return resp.status(400).json({
+                message: "Query is required"
+            });
+        }
+        const targetSource = source || filename || filePath;
+        const data = await pdfRag(query, targetSource);
+        if (typeof data === 'string') {
+            return resp.status(200).json({
+                answer: data,
+                data: data,
+                source: targetSource
+            });
+        }
+        return resp.status(200).json(data);
+    } catch (err) {
+        console.error(err);
+        return resp.status(500).json({
+            message: err.message
         });
     }
 };

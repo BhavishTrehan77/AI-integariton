@@ -115,13 +115,14 @@ export default function KnowledgeBaseView() {
 
     try {
       if (qaMode === 'rag') {
-        // Run PDF RAG Vector Search via /api/v1/rag-ans
+        // Run PDF RAG Vector Search targeted to active selected document
+        const targetDoc = activeDocName || activeDocPath;
         let res;
         try {
-          res = await queryRag(q);
+          res = await queryRag(q, targetDoc);
         } catch (ragErr) {
           console.warn('Standard RAG fallback:', ragErr);
-          res = await queryPdfRag(q, activeDocPath);
+          res = await queryPdfRag(q, targetDoc);
         }
         setAnswer({
           text: typeof res === 'string' ? res : (res.answer || res.text || JSON.stringify(res)),
@@ -129,7 +130,7 @@ export default function KnowledgeBaseView() {
           sourcePath: activeDocPath,
           mode: 'Vector RAG Search',
           score: 0.86,
-          chunkPreview: `Matched vector embedding chunk from MongoDB for "${activeDocPath}"`
+          chunkPreview: `Matched vector embedding chunk from MongoDB for "${activeDocName || activeDocPath}"`
         });
       } else {
         // Run Direct PDF Multimodal

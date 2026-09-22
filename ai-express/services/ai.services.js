@@ -14,7 +14,7 @@ const taskSchema=z.object({
 
 export const generateAi=async(message)=>{
     const response=await ai.models.generateContent({
-        model:"gemini-3.5-flash-lite",
+        model:"gemini-3.6-flash-lite",
         contents:message,
         config:{
             systemInstruction:`ai should answer the question concisely and give correct answer`
@@ -26,7 +26,7 @@ export const generateAi=async(message)=>{
 
 export const generateAIResponse=async(message)=>{
     const response=await ai.models.generateContent({
-        model:"gemini-3.5-flash-lite",
+        model:"gemini-3.6-flash-lite",
         contents:message,
         config:{
             systemInstruction:` You are a helpful task assistant.
@@ -59,7 +59,7 @@ export const generateAIResponse=async(message)=>{
 
 export const generateAIStream=async(message)=>{
     const stream=await ai.models.generateContentStream({
-        model:'gemini-3.6-flash',
+        model:'gemini-3.6-flash-lite',
         contents:message,
         config:{
             systemInstruction:` You are a helpful AI assistant.
@@ -91,11 +91,8 @@ export const generateEmbedding = async (text) => {
 // }
 export const generateTextResponse = async (prompt) => {
 
-    console.log("🔥 generateTextResponse CALLED");
-    console.log("🔥 MODEL = gemini-2.5-flash");
-
     const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash-lite",
+        model: "gemini-3.6-flash-lite",
         contents: prompt
     })
 
@@ -105,7 +102,7 @@ export const generateTextResponse = async (prompt) => {
 
 export const rewriteQuery=async(query)=>{
     const response=await ai.models.generateContent({
-        model:"gemini-3.5-flash-lite",
+        model:"gemini-3.6-flash-lite",
         contents:`Rewrite the users query into clear and specific search query .Return only the rewritten query. Do not answer the question. User Query ${query}`
     })
     return response.text.trim();
@@ -114,7 +111,7 @@ export const rewriteQuery=async(query)=>{
 
 export const expandQuery=async(query)=>{
     const response=await ai.models.generateContent({
-        model:"gemini-3.1-flash-lite",
+        model:"gemini-3.6-flash-lite",
         contents:`Generate 3 different search queries that could help retrieve documents relevant to the user questions. return only 3 queries one per line. Do not answer the question User quesion ${query}`
     })
     return response.text.trim()
@@ -130,7 +127,7 @@ export const addNumbers=(a,b)=>{
 
 export const functionCalling=async(message)=>{
     const response=await ai.models.generateContent({
-        model:"gemini-3.6-flash",
+        model:"gemini-3.6-flash-lite",
         contents:message,
 
         config:{
@@ -198,7 +195,7 @@ export const getWeather = async (city) => {
 
 export const weatherTool=async(message)=>{
    const response=await ai.models.generateContent({
-    model:"gemini-3.6-flash",
+    model:"gemini-3.6-flash-lite",
     contents:message,
     config:{
         tools:[
@@ -235,7 +232,7 @@ export const tools = {
 
 export const agent = async (query) => {
     const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-3.6-flash-lite",
         contents: query,
 
         config: {
@@ -285,7 +282,7 @@ export const agent = async (query) => {
 export const createPlan = async (query) => {
 
     const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-3.6-flash-lite",
 
         contents: `
 You are AI planning agent.
@@ -363,7 +360,7 @@ export const agentLoop=async(query)=>{
     ];
     while(true){
         const response=await ai.models.generateContent({
-            model:"gemini-3.5-flash",
+            model:"gemini-3.6-flash-lite",
             contents:message,
             config:{
                 tools:[
@@ -431,7 +428,7 @@ export const agentLoop=async(query)=>{
 }
 export const analyzeImage=async(imageBase64,question)=>{
     const response=await ai.models.generateContent({
-        model:"gemini-3.6-flash",
+        model:"gemini-3.6-flash-lite",
         contents: [
             {
                 inlineData:{
@@ -449,7 +446,7 @@ export const analyzeImage=async(imageBase64,question)=>{
 
 export const analyzeImageStructure=async(imageBase64,question)=>{
     const response=await ai.models.generateContent({
-        model:"gemini-3.6-flash",
+        model:"gemini-3.6-flash-lite",
         contents:[
             {
                 inlineData:{
@@ -473,7 +470,7 @@ ${question}`
 
 export const analyzePDF =async(pdfBase64,question)=>{
     const response=await ai.models.generateContent({
-        model:"gemini-3.6-flash",
+        model:"gemini-3.6-flash-lite",
         contents:[
             {
                 inlineData: {
@@ -490,63 +487,162 @@ export const analyzePDF =async(pdfBase64,question)=>{
     return response.text
 }
 
-export const extractPdfText=async(filePath)=>{
-    const dataBuffer=fs.readFileSync(filePath)
+export const processPdf = async (input, originalName = "document.pdf") => {
+    let dataBuffer;
+    let sourceName = originalName;
 
-    const parser=new PDFParse({
-        data:dataBuffer
-    })
-    const data=await parser.getText();
+    if (Buffer.isBuffer(input)) {
+        dataBuffer = input;
+    } else if (typeof input === 'string') {
+        dataBuffer = fs.readFileSync(input);
+        sourceName = originalName || path.basename(input);
+    } else {
+        throw new Error("Invalid input: expected Buffer or file path string");
+    }
 
-    await parser.destroy(); 
+    const parser = new PDFParse({ data: dataBuffer });
+    const data = await parser.getText();
+    if (typeof parser.destroy === 'function') {
+        await parser.destroy();
+    }
 
-    const text=data.text;
+    const text = data.text;
+    const chunks = chunkTextByWords(text, 250, 50);
+    console.log(`Processing PDF "${sourceName}": Generated ${chunks.length} chunks`);
 
-    const chunks=chunkTextByWords(text,100,20)
+    const results = [];
+    for (const chunk of chunks) {
+        const embedding = await generateEmbedding(chunk);
+        const doc = await Embedding.create({
+            text: chunk,
+            embedding: embedding,
+            source: sourceName
+        });
+        results.push(doc);
+    }
+    return results;
+};
 
-   const results=[]
-   for (const chunk of chunks){
-    const embedding=await generateEmbedding(chunk);
+export const extractPdfText = async (filePath) => {
+    return await processPdf(filePath, filePath);
+};
 
-    const result=await Embedding.create({
-        text:chunk,
-        embedding:embedding,
-        source: filePath
-    })
-    results.push(result)
-   } 
-   return results
-}
+export const ProcessPdf = processPdf;
 
-export const pdfRag=async(query,filePath)=>{
-    const queryEmbedding=await generateEmbedding(query)
-    const cleanPath = filePath.replace(/^\.\//, '')
+export const pdfRag = async (query, source = null) => {
+    const queryEmbedding = await generateEmbedding(query);
+    const cleanName = source ? source.replace(/^.*[\\\/]/, '').trim() : null;
 
-    const results=await Embedding.aggregate([
-        {
-            $vectorSearch:{
-                index:"vector_index",
-                path:"embedding",
-                queryVector:queryEmbedding,
-                numCandidates:50,
-                limit:5,
-                filter:{
-                    source: { $in: [cleanPath, `./${cleanPath}`] }
+    const vectorSearchStage = {
+        index: "vector_index",
+        path: "embedding",
+        queryVector: queryEmbedding,
+        numCandidates: 50,
+        limit: 5
+    };
+
+    if (cleanName) {
+        vectorSearchStage.filter = {
+            source: {
+                $in: [cleanName, `uploads/${cleanName}`, `./uploads/${cleanName}`, source]
+            }
+        };
+    }
+
+    let results = [];
+    try {
+        results = await Embedding.aggregate([
+            { $vectorSearch: vectorSearchStage },
+            {
+                $project: {
+                    text: 1,
+                    source: 1,
+                    score: { $meta: "vectorSearchScore" }
                 }
             }
-        }
-    ])
-    const context=results.map(result=>result.text).join("\n")
-    const response=await ai.models.generateContent({
-        model:"gemini-3.5-flash",
-        contents:`Answer the users question only the basis of provided context .
-        PDF context is ${context} and user question is ${query}If the answer is not present in the PDF context,
-say "I don't know based on the provided PDF."
-`
-    })
-    return response.text
-}
+        ]);
+    } catch (err) {
+        console.warn("Atlas VectorSearch filter failed (fallback to post-filtering):", err.message);
+        const fallbackResults = await Embedding.aggregate([
+            {
+                $vectorSearch: {
+                    index: "vector_index",
+                    path: "embedding",
+                    queryVector: queryEmbedding,
+                    numCandidates: 100,
+                    limit: 30
+                }
+            },
+            {
+                $project: {
+                    text: 1,
+                    source: 1,
+                    score: { $meta: "vectorSearchScore" }
+                }
+            }
+        ]);
 
-// Aliases matching document service conventions
+        if (cleanName) {
+            const filtered = fallbackResults.filter(doc => {
+                if (!doc.source) return false;
+                const docBase = doc.source.replace(/^.*[\\\/]/, '').trim().toLowerCase();
+                return docBase === cleanName.toLowerCase() || doc.source.toLowerCase().includes(cleanName.toLowerCase());
+            });
+            results = filtered.length > 0 ? filtered.slice(0, 5) : fallbackResults.slice(0, 5);
+        } else {
+            results = fallbackResults.slice(0, 5);
+        }
+    }
+
+    // GUARANTEED CONTEXT: If vector search returned 0 chunks (or semantic mismatch on general queries like 'summarize'),
+    // retrieve document chunks directly from MongoDB!
+    if ((!results || results.length === 0) && cleanName) {
+        console.log(`Vector search returned 0 chunks for "${cleanName}". Falling back to direct chunk retrieval from MongoDB...`);
+        const escapeRegex = cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const directChunks = await Embedding.find({
+            source: { $regex: escapeRegex, $options: 'i' }
+        }).limit(8).select('text source');
+
+        if (directChunks && directChunks.length > 0) {
+            console.log(`✓ Retrieved ${directChunks.length} direct chunks from MongoDB for "${cleanName}"`);
+            results = directChunks;
+        }
+    }
+
+    // Absolute fallback: if still empty, get the most recently uploaded chunks so context is NEVER empty
+    if (!results || results.length === 0) {
+        console.log("Retrieving most recent document chunks from MongoDB as fallback...");
+        const recentChunks = await Embedding.find().sort({ _id: -1 }).limit(6).select('text source');
+        if (recentChunks && recentChunks.length > 0) {
+            results = recentChunks;
+        }
+    }
+
+    const context = results.map(r => r.text).filter(Boolean).join("\n\n");
+    const prompt = `You are an expert AI document analysis assistant.
+The user is asking questions about the document: "${cleanName || 'uploaded document'}".
+
+Here is the retrieved content from the document:
+--- DOCUMENT CONTENT BEGIN ---
+${context}
+--- DOCUMENT CONTENT END ---
+
+User Question: ${query}
+
+Instructions:
+1. Answer the user's question clearly, thoroughly, and helpfully using the document content provided above.
+2. If the user asks for a summary, an overview, or "what information is present inside this uploaded pdf", synthesize the key information, sections, numbers, dates, organizations, and amounts present in the text above.
+3. Even if the text only partially answers the query, explain all the relevant details that ARE present in the document.
+4. Do NOT say "I don't know" or "information not present" when the document content above contains relevant facts, numbers, or details that can answer or describe the document.`;
+
+    const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt
+    });
+
+    return response.text;
+};
+
+export const RagAnss = pdfRag;
 export const GenerateEmbedding = generateEmbedding;
 export const GeneratePromptResponse = generateTextResponse;
